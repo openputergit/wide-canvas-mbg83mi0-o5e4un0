@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Among Us Cyber Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background: #0a0a0a;
+            color: #00ff9d;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .player {
+            width: 40px;
+            height: 50px;
+            position: absolute;
+            transition: all 0.1s;
+            border-radius: 20px 20px 10px 10px;
+        }
+        .player::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 15px;
+            background: #00a6ff;
+            border-radius: 5px;
+            top: 15px;
+            left: 25px;
+        }
+        .enemy {
+            width: 40px;
+            height: 50px;
+            position: absolute;
+            background: #ff0066;
+            border-radius: 20px 20px 10px 10px;
+        }
+        .enemy::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 15px;
+            background: #ff9900;
+            border-radius: 5px;
+            top: 15px;
+            left: 25px;
+        }
+        .task {
+            width: 30px;
+            height: 30px;
+            position: absolute;
+            background: #ffff00;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        @media (max-width: 768px) {
+            #joystick {
+                display: block !important;
+            }
+        }
+        .glitch {
+            animation: glitch 1s infinite;
+        }
+        @keyframes glitch {
+            0% { text-shadow: 2px 2px #ff0066; }
+            25% { text-shadow: -2px -2px #00ff9d; }
+            50% { text-shadow: 2px -2px #ff0066; }
+            75% { text-shadow: -2px 2px #00ff9d; }
+            100% { text-shadow: 2px 2px #ff0066; }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen">
+    <div id="menu" class="absolute inset-0 flex flex-col items-center justify-center z-50 bg-black bg-opacity-90">
+        <h1 class="text-5xl mb-8 glitch">CYBER AMONG US</h1>
+        <button id="startBtn" class="bg-[#ff0066] text-white px-8 py-4 rounded-lg hover:bg-[#cc0052] transition-all">
+            START GAME
+        </button>
+        <p class="mt-4 text-sm">Complete tasks and avoid impostors!</p>
+        <p class="mt-2 text-sm">Desktop: WASD to move | Mobile: Use virtual joystick</p>
+    </div>
+
+    <div id="game" class="hidden">
+        <div id="stats" class="fixed top-4 left-4 z-40">
+            <div class="text-xl">Tasks: <span id="tasks">0</span>/5</div>
+            <div class="text-xl">Crew Alive: <span id="crewCount">4</span></div>
+        </div>
+        
+        <div id="joystick" class="hidden fixed bottom-10 left-10 z-50 bg-white bg-opacity-20 rounded-full w-32 h-32">
+            <div id="stick" class="absolute bg-white bg-opacity-50 w-16 h-16 rounded-full"></div>
+        </div>
+
+        <div id="player" class="player bg-[#00ff9d]"></div>
+        
+        <div id="gameOver" class="hidden fixed inset-0 flex flex-col items-center justify-center bg-black bg-opacity-90 z-50">
+            <h2 class="text-4xl mb-4 glitch" id="gameOverText">GAME OVER</h2>
+            <p class="text-2xl mb-4">Tasks Completed: <span id="finalTasks">0</span>/5</p>
+            <button onclick="location.reload()" class="bg-[#ff0066] text-white px-6 py-3 rounded-lg hover:bg-[#cc0052]">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const menu = document.getElementById('menu');
+        const game = document.getElementById('game');
+        const player = document.getElementById('player');
+        const tasksDisplay = document.getElementById('tasks');
+        const crewCountDisplay = document.getElementById('crewCount');
+        const gameOver = document.getElementById('gameOver');
+        const gameOverText = document.getElementById('gameOverText');
+        const finalTasks = document.getElementById('finalTasks');
+        const joystick = document.getElementById('joystick');
+        const stick = document.getElementById('stick');
+
+        let tasksCompleted = 0;
+        let crewAlive = 4;
+        let enemies = [];
+        let tasks = [];
+        let keys = {};
+        let gameLoop;
+        let joystickActive = false;
+        let joystickData = { x: 0, y: 0 };
+
+        function createTask() {
+            const task = document.createElement('div');
+            task.className = 'task';
+            task.style.left = Math.random() * (window.innerWidth - 30) + 'px';
+            task.style.top = Math.random() * (window.innerHeight - 30) + 'px';
+            game.appendChild(task);
+            
+            task.addEventListener('click', () => {
+                if (isPlayerNear(task)) {
+                    task.remove();
+                    tasksCompleted++;
+                    tasksDisplay.textContent = tasksCompleted;
+                    if (tasksCompleted >= 5) {
+                        endGame(true);
+                    }
+                }
+            });
+            
+            tasks.push(task);
+        }
+
+        function isPlayerNear(element) {
+            const playerRect = player.getBoundingClientRect();
+            const elementRect = element.getBoundingClientRect();
+            const distance = Math.sqrt(
+                Math.pow(playerRect.left - elementRect.left, 2) +
+                Math.pow(playerRect.top - elementRect.top, 2)
+            );
+            return distance < 100;
+        }
+
+        // Mobile controls
+        if ('ontouchstart' in window) {
+            joystick.style.display = 'block';
+            
+            stick.addEventListener('touchstart', handleTouch);
+            stick.addEventListener('touchmove', handleTouch);
+            stick.addEventListener('touchend', () => {
+                joystickActive = false;
+                stick.style.transform = `translate(-50%, -50%)`;
+            });
+        }
+
+        function handleTouch(e) {
+            e.preventDefault();
+            joystickActive = true;
+            const touch = e.touches[0];
+            const joystickRect = joystick.getBoundingClientRect();
+            const centerX = joystickRect.left + joystickRect.width / 2;
+            const centerY = joystickRect.top + joystickRect.height / 2;
+            
+            let dx = touch.clientX - centerX;
+            let dy = touch.clientY - centerY;
+            const distance = Math.min(Math.sqrt(dx * dx + dy * dy), joystickRect.width / 2);
+            const angle = Math.atan2(dy, dx);
+            
+            dx = Math.cos(angle) * distance;
+            dy = Math.sin(angle) * distance;
+            
+            stick.style.transform = `translate(${dx}px, ${dy}px)`;
+            
+            joystickData = {
+                x: dx / (joystickRect.width / 2),
+                y: dy / (joystickRect.height / 2)
+            };
+        }
+
+        startBtn.addEventListener('click', startGame);
+
+        function startGame() {
+            menu.classList.add('hidden');
+            game.classList.remove('hidden');
+            
+            // Create initial tasks
+            for (let i = 0; i < 5; i++) {
+                createTask();
+            }
+            
+            // Create impostor enemies
+            for (let i = 0; i < 2; i++) {
+                createEnemy();
+            }
+            
+            gameLoop = setInterval(update, 16);
+        }
+
+        function createEnemy() {
+            const enemy = document.createElement('div');
+            enemy.className = 'enemy';
+            game.appendChild(enemy);
+            
+            const pos = {
+                x: Math.random() * (window.innerWidth - 40),
+                y: Math.random() * (window.innerHeight - 50),
+                element: enemy
+            };
+            
+            enemy.style.left = pos.x + 'px';
+            enemy.style.top = pos.y + 'px';
+            enemies.push(pos);
+        }
+
+        document.addEventListener('keydown', e => keys[e.key] = true);
+        document.addEventListener('keyup', e => keys[e.key] = false);
+
+        function update() {
+            // Player movement
+            const speed = 5;
+            let playerX = parseInt(player.style.left || 0);
+            let playerY = parseInt(player.style.top || 0);
+
+            if (joystickActive) {
+                playerX += joystickData.x * speed;
+                playerY += joystickData.y * speed;
+            } else {
+                if (keys['w']) playerY -= speed;
+                if (keys['s']) playerY += speed;
+                if (keys['a']) playerX -= speed;
+                if (keys['d']) playerX += speed;
+            }
+
+            playerX = Math.max(0, Math.min(window.innerWidth - 40, playerX));
+            playerY = Math.max(0, Math.min(window.innerHeight - 50, playerY));
+
+            player.style.left = playerX + 'px';
+            player.style.top = playerY + 'px';
+
+            // Update enemies
+            enemies.forEach((enemy, index) => {
+                const dx = playerX - enemy.x;
+                const dy = playerY - enemy.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                enemy.x += (dx / dist) * 2;
+                enemy.y += (dy / dist) * 2;
+                enemy.element.style.left = enemy.x + 'px';
+                enemy.element.style.top = enemy.y + 'px';
+
+                // Collision with player
+                if (dist < 40) {
+                    endGame(false);
+                }
+            });
+        }
+
+        function endGame(victory) {
+            clearInterval(gameLoop);
+            gameOver.classList.remove('hidden');
+            gameOverText.textContent = victory ? "VICTORY!" : "IMPOSTOR WINS!";
+            finalTasks.textContent = tasksCompleted;
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
